@@ -1,0 +1,121 @@
+Documentation for all columns of wallets_50+_raw_csv.
+
+IMPORTANT NOTE about wallets_50+_raw_csv:
+    To reduce the time for the script to collect all the wallets,
+    the script limited the number of trades it looked at per wallet.
+    Specifically, the script looked at:
+        The most recent 5,000 closed positions.
+        -AND-
+        The 5,000 held positions* with the greatest value.
+    Therefore, the maximum number of bets per wallet is 10,000.
+
+*A held position goes into either n_unredeemed or n_open_unresolved with no preference (see below)
+
+
+
+wallet:
+    Unique wallet ID. You can view that wallet's profile by looking up
+    https://polymarket.com/profile/<wallet ID>
+
+name:
+    Unique wallet's username. <null> values represent users who are anonymous and therefore
+    do not have a username.
+
+sources:
+    build_wallet_dataset.py searches several different places within the Polymarket API.
+    A wallet can have more than one source.
+    leaderboard:
+        Wallets pulled from the top N of different leaderboard periods (API max 10,000).
+        This data set looked at the API maximum of 10,000.
+        A wallet can be on more than one leaderboard.
+        Periods Include:
+            leaderboard_all
+            leaderboard_month
+            leaderboard_week
+            leaderboard_vol_all
+            leaderboard_vol_month
+            leaderboard_vol_week
+    market_holder:
+        Wallets pulled from the top N holders per outcome of the top N open markets.
+        This data set looked at the top 2,000 open markets (API max ~2,000), then
+        pulled the top 500 holders per outcome of each market (API max ~500).
+
+    closed_market_holder:
+        Wallets pulled from the top N holders per outcome of the top N resolved markets.
+        This data set looked at the top 200 open markets (API max ~2,000), then
+        pulled the top 500 holders per outcome of each market (API max ~500).
+    recent-trades:
+        Wallets pulled from the 10,000 most recent trades at the time the code ran.
+
+n_bets:
+    Equal to n_closed + n_unredeemed.
+
+n_closed:
+    Number of positions a wallet has that are "Closed".
+    A position is considered closed if:
+        The position is resolved (there is a result and no new bets can be placed).
+        -OR-
+        The wallet no longer has any shares of that position, even if the position is unresolved.
+    So, n_closed counts positions that were sold prior to when the market was resolved.
+
+n_unredeemed:
+    Number of positions a wallet has that are "Unredeemed".
+    A position is considered unredeemed if position is open and the market is resolved.
+    Closing a position is how a wallet can cash in on a bet it made.
+    Hence, most unredeemed bets are losses worth $0.00, so closing them does not affect the user.
+
+n_open_unresolved:
+    Number of current bets at the time that the code was run.
+
+wins:
+    Number of bets where profit > 0.
+
+losses:
+    Number of bets where profit <= 0.
+    Calculated by n_bets - n_wins.
+
+win_rate
+    Equal to wins / n_bets.
+
+avg_entry_price
+    Calculated as average of avgPrice across bets, with each bet counted equally.
+    Can be interpreted as the expected win rate due to luck.
+        This is because the bets are priced based on how unlikely they are to win.
+        For example, a bet that costs $0.90 per share has a ~90% chance of winning,
+        and a bet that costs $0.10 per share has a ~10% chance of winning.
+
+        Each winning bet pays $1.00 per share.
+        So, 10 shares of a $0.20 bet would cost $2.00, and would pay $10.00 if it wins.
+        Hence, the net profit would be $8.00.
+
+win_rate_edge
+    Equal to win_rate - avg_entry_price.
+    Can be interpreted as how often the wallet does better than expected.
+    In essence, the skill level of the wallet's user.
+    A value of zero means that wallet's results are equivalent to complete luck.
+    A positive value means that the wallet's results are better than expected from luck.
+    A negative value means that the wallet's results are worse than expected from luck.
+
+total_pnl
+    Total profit across all resolved bets.
+    Negative values mean that the wallet has lost more money than it is gained.
+
+total_cost
+    Total amount of money bet across all bets.
+
+roi
+    Equal to total_pnl / total_cost.
+
+median_pnl
+    Median profit across all bets.
+    Note: if win_rate < 0.5, then median_pnl <= 0
+
+first_end_date
+    Earliest scheduled end date of the markets the wallet bet on.
+    A value of 1970-01-01 means that there is no end date, or it is unknown.
+
+last_end_date
+    Latest scheduled end date of the markets the wallet bet on.
+
+history_truncated
+    True if the wallet had more than 5,000 closed positions and/or 5,000 held positions.
