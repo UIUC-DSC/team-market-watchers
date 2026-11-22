@@ -1,0 +1,309 @@
+Documentation for all columns of trades_raw.parquet.
+
+IMPORTANT NOTES:
+    To reduce the time for the script to collect all the wallets' actions*,
+    the script capped the number of actions it looked at to 20,000 per wallet.
+    Actions were downloaded from 11:00PM Central on 11/19/2026 to about 4:30AM on 11/21/2026.
+    Market info was added by 3:30PM on 11/21/2026, and Blank markets were retried at about 10:00PM that night.
+    The script did not run continuously.
+    Because wallets were downloaded over about 30 hours, each wallet’s history ends at a slightly different time.
+    The wallets come from wallets with at least 50 closed positions from wallets_50+_raw.csv.
+    There are 72,412 wallets and 201,900,626 rows.
+    Only the five action types listed under "type" were collected (rewards and other types are not included).
+    About 1.3 million rows (0.65%) have no market info. Almost all of them are combos (61%)
+    or conversions (32%); only about 0.05% of rows are ordinary actions missing market info.
+    The market info columns of these rows are Blank.
+
+*Read the documentation for the "type" column for more information.
+
+
+
+Important terminology:
+    Wallet:
+        A Polymarket account, identified by its wallet address (the "wallet" column).
+        Each wallet is one user (or one bot).
+
+    Event:
+        One page on Polymarket, grouping one or more related markets.
+        For example, the event "Who will win the 2026 World Cup?" contains one market per team.
+        An event such as "Will it rain in NYC tomorrow?" has only one market.
+
+    Market:
+        One yes/no question inside an event.
+        Ex: in the event "Who will win the 2026 World Cup?":
+            "Will Spain win the 2026 World Cup?" is a market
+            "Will France win the 2026 World Cup?" is a market, etc.
+        Each market has exactly two outcomes.
+
+    Outcome:
+        One of the two possible answers of a market, such as "Yes"/"No", "Up"/"Down",
+        "Over"/"Under", or two team names. Exactly one outcome of each market wins.
+
+    Share:
+        A unit of one outcome. A share pays $1 if its outcome wins and $0 if it loses.
+        Shares are bought and sold at a price between $0 and $1.
+        All shares of one outcome have the same token_id.
+
+    Position:
+        All the shares a wallet holds (or held) in one outcome of one market,
+        A wallet builds a position by buying shares, possibly over many trades,
+        and closes it by selling or redeeming them.
+
+    Action:
+        One thing a wallet did, recorded as one row of this file.
+        One of TRADE, SPLIT, MERGE, REDEEM or CONVERSION (see "type").
+
+    Resolution (resolved):
+        When the market's result is decided and each share's payout is set:
+        $1 for winning shares, $0 for losing shares (rarely $0.50 each for a 50/50 result).
+
+    Combo (parlay):
+        A single bet made across several markets that wins only if every part wins.
+        Marked by is_combo = True; combos have no single market, so no market info.
+
+    Market info:
+        The columns from event_id to profit_if_held, looked up separately from each market's
+        record on Polymarket. When this lookup found nothing, all of these columns are Blank.
+
+    Blank (null):
+        A missing value. The file has only one kind of missing value; a viewer may
+        display it as <null>, <unset>, NaN, None, or <NA> depending on the column's type.
+
+    UTC:
+        Coordinated Universal Time. All times in this file are in UTC.
+        UTC is 6 hours ahead of US Central Time in winter and 5 hours ahead
+        during daylight saving time (mid-March to early November).
+
+    USDC:
+        USDC (USD Coin) is a U.S. dollar-pegged stablecoin issued by Circle.
+        Each token is designed to maintain a 1:1 value with the U.S. dollar and is backed by cash
+        and short-term U.S. Treasury assets held at regulated financial institutions.
+        In essence, it is a cryptocurrency version of the United States Dollar.
+        All amounts in this file are in USDC.
+
+    Market Maker:
+        A wallet that keeps buy and sell orders open on both sides of a market,
+        earning the gap between the prices rather than betting on the result.
+        Market makers often SPLIT and MERGE, and usually have a ton of actions.
+
+
+
+
+COLUMN EXPLANATIONS:
+
+wallet:
+    Contains the unique wallet ID. You can view that wallet's profile by looking up
+    https://polymarket.com/profile/<wallet ID>
+
+name:
+    Contains the wallet's username. Blank means the wallet has no username on record.
+
+type:
+    Represents the action that a wallet took.
+    Actions include:
+        TRADE:
+            Buying or selling shares of one outcome.
+        SPLIT:
+            When a wallet spends $1 to create one "Yes" share and one "No" share in a market.
+            This is often done by market makers.
+        MERGE:
+            When a wallet merges one "Yes" share and one "No" share to receive $1.
+        REDEEM:
+            After a market resolves, turn shares into cash:
+            $1 per winning share, $0 per losing share.
+            Includes automatic redemptions.
+        CONVERSION:
+            In mutually exclusive events, swap "No" shares in some markets
+            for "Yes" shares in the others, plus cash when more than one "No" is converted.
+            Ex:
+                In the event "Who will win the 2026 World Cup?",
+                A wallet holding "No" on Spain could convert it into "Yes" on every other team.
+            Only events where negative_risk = True have the possibility of a conversion happening.
+            Conversion can only go from No to Yes, but not Yes to No.
+            For a more in-depth explanation on conversion, go to the bottom of the document.
+
+side:
+    Whether the TRADE was a buy or sell, and Blank for any other type of action.
+    BUY:
+        buying shares of an outcome.
+    SELL:
+        selling shares of an outcome.
+
+time:
+    What time the action took place in the form YYYY-MM-DD HH:MM:SS in UTC.
+    UTC is 6 hours ahead of US Central Time in winter and 5 hours ahead during daylight saving time.
+
+title:
+    The market's question as shown on Polymarket.
+    For combo trades, it’s the questions of every market in the combined bet joined by "AND".
+    Ex: "Angels vs. Red Sox AND Red Sox vs. Yankees".
+    May be Blank for some rows where type = CONVERSION.
+
+slug:
+    A short text ID for the market.
+
+event_slug:
+    A short text ID for the event the market belongs to.
+    You can view the event at https://polymarket.com/event/<event_slug>.
+    An event groups related markets.
+
+outcome:
+    The name of the outcome that was traded or redeemed.
+    Ex: "Yes"/"No", "Up"/"Down", "Over"/"Under", "Yankees", "Norway", etc.
+    Blank if type = SPLIT, MERGE, or CONVERSION (and for about 0.01% of REDEEMs).
+    It comes from the wallet's own action record, so it is filled in even when no market info was found.
+
+outcome_index:
+    Mostly 0 or 1 based on the market's outcome.
+    If the value outcome is:
+        0: "Yes",  "Up",   "Over"
+        1: "No",  "Down",  "Under"
+        999: the action involves both outcomes, so outcome is Blank
+    A value of 0 or 1 can also correspond to a team name. Ex: "Yankees"
+    There are a few rows with numbers that are not 0, 1, or 999.
+    They are from the older version of Polymarket (2020-2021) where a market
+    could have more than two outcomes; the index is that outcome's position in the list.
+    There are 52 such rows, all REDEEMs.
+
+condition_id:
+    The unique id of the market.
+    Can be used to group all actions in the same market.
+    Real market IDs start with "0x".
+    Some rows where type = CONVERSION have an ID that starts with "\x";
+    these are not real market IDs and have no market info.
+
+token_id:
+    The unique ID of one outcome’s shares.
+    Ex: the “Yes” shares of one market.
+    Each market has two token IDs, one per outcome.
+    Note: While the token IDs are numbers, they are stored as text due to their length.
+    Keep them as text; converting them to numbers rounds them.
+    Blank if type = SPLIT, MERGE, or CONVERSION, and for about 2% of REDEEMs.
+
+price:
+    The price per share in USDC, from 0 to 1.
+    For TRADEs, this approximately represents the market’s implied probability at that moment:
+    buying “Yes” at 0.30 means the market gave it about a 30% chance.
+    For rows where type = SPLIT, price is 0.5, except for some rows from April-June 2026 that show 0.
+    For rows where type = REDEEM, MERGE, or CONVERSION, price is 0; it is not applicable.
+
+size:
+    The number of shares in the action; the number bought, sold, redeemed, etc.
+    For type = SPLIT or MERGE, it is the number of pairs created or cashed out:
+    size = 10 means 10 "Yes" and 10 "No" shares, for $10.
+
+usdc_size:
+    The dollars (USDC) that changed hands, not counting trading fees.
+    TRADE: about price * size. The wallet paid this on a BUY and received it on a SELL.
+    SPLIT: dollars put in (equal to size).
+    MERGE: dollars received (equal to size).
+    REDEEM: dollars received, equal to size * payout_per_share. It’s 0 when losing shares are redeemed.
+    CONVERSION: the cash the wallet received. It's 0 when only one "No" was converted,
+    otherwise a whole multiple of size (see "More information on Conversion" at the bottom).
+
+transaction_hash:
+    The ID of the blockchain transaction that recorded the action.
+    You can view it at https://polygonscan.com/tx/<hash>.
+    Several rows can share one hash if one order was filled by several traders.
+
+is_combo:
+    True if the trade was part of a combo bet across several markets.
+    These rows have no single market, so all of their market info columns are Blank.
+
+history_truncated:
+    True if the wallet had 20,000 or more actions, so only its most recent 20,000 were collected.
+    It’s the same on every row of a wallet.
+
+position_entry_fees_usdc:
+    The total trading fees the wallet paid on ALL of its purchases of this outcome.
+    It describes the wallet’s whole position in that outcome, not this one row.
+    Hence, it repeats on every row with the same wallet and token_id.
+    Don't add it up across rows; take it once per wallet and token_id.
+
+position_total_cost_usdc:
+    The total money the wallet spent buying this outcome, fees included.
+    This is the total amount spent for the position as a whole, so it repeats on every row
+    of the position. Don't add it up across rows.
+
+event_id:
+    The numeric ID of the event the market belongs to.
+    Markets that share an event_id are related, so their results aren’t independent.
+    This is useful for the dependence issue in z-scores, for example clustering by event.
+    Blank when no market info was found: combos, most conversions, malformed IDs,
+    and the old multi-outcome markets.
+
+negative_risk:
+    True if the market is part of an event where exactly one market can resolve “Yes”,
+    such as “Who will win the election?” with one market per candidate.
+    CONVERSIONs only happen in these events.
+    Blank when no market info was found.
+
+end_date:
+    The market’s scheduled end date (YYYY-MM-DD), set when the market was created.
+    The actual resolution can be earlier or later.
+    Blank when no market info was found.
+
+opposite_token_id:
+    The token_id of the other outcome in the same market.
+    For example, on a “Yes” row, the opposite_token_id refers to the “No” token.
+    Blank if outcome_index is anything other than 0 or 1, or when no market info was found.
+
+current_price:
+    This outcome’s price when the script looked the market up.
+    For resolved markets, it’s the final payout (1, 0 or 0.5).
+    For markets still open, it's a snapshot from 11/21/2026 and changes after that.
+    It is not the price at the time of the action; that's "price".
+    Blank if outcome_index is anything other than 0 or 1, or when no market info was found.
+
+market_resolved:
+    True if the market had resolved when the script looked it up.
+    False means the market was still open, or that no market info was found for it.
+
+resolved_time:
+    When the market was resolved, in UTC.
+    Blank means the market was not resolved at the time the script ran, or no market info was found.
+
+payout_per_share:
+    What one share of this outcome paid at resolution:
+    1 if it won, 0 if it lost, and 0.5 for markets resolved 50/50.
+    Blank means the market was not resolved at the time the script ran, or no market info was found.
+
+won:
+    True if this row's outcome won, False if it lost,
+    regardless of whether the wallet held the position until the market resolved.
+    Blank if the market hasn't resolved, resolved 50/50, or the row isn't about one outcome.
+    For a SELL row, won = True means the wallet sold shares that later won.
+    Ex: If a wallet bought "Yes" for Kamala Harris winning the 2024 election for $0.20 per share
+    and sold its holdings for $0.40 per share before the market resolved, won would equal False,
+    even though the wallet made money on the position.
+
+profit_if_held:
+    The profit the shares would have made if held until the market resolved:
+    (payout_per_share - price) * size. Excludes trading fees.
+    Blank if the market is not resolved or the row is not a BUY trade.
+
+
+
+
+**More information on Conversion:
+
+Polymarket’s conversion takes “No” shares in one or more markets of a negative-risk event
+and turns them into “Yes” shares in the event’s other markets, sometimes with cash too.
+
+There’s no conversion action that goes from “Yes” to “No”.
+This is because, in a negative-risk event, exactly one market resolves “Yes”.
+
+Take the World Cup event with 4 teams, and a wallet holding 1 “No” share on Spain:
+If Spain loses, which happens whenever France, Brazil or Germany wins, it pays $1.
+That’s exactly what 1 “Yes” on France + 1 “Yes” on Brazil + 1 “Yes” on Germany pays,
+since exactly one of those three wins.
+
+The two holdings are worth the same, so Polymarket lets you swap the first for the second.
+That swap is the conversion.
+
+Where the cash comes from: converting “No” on 2 teams, Spain and France:
+“No” on Spain + “No” on France together pay $2 if Brazil or Germany wins, and $1 if Spain or France wins.
+That equals “Yes” on Brazil + “Yes” on Germany (pays $1 in the first case, $0 in the second) plus $1 in cash.
+
+So converting “No” in k markets gives “Yes” in the remaining markets plus k − 1 dollars per share.
+That’s why usdc_size is 0 for conversions of a single “No” and a whole multiple of size otherwise.
